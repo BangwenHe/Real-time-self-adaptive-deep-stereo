@@ -10,7 +10,7 @@ import json
 import datetime
 import shutil
 from matplotlib import pyplot as plt
-from Data_utils import data_reader,weights_utils,preprocessing
+from Data_utils import data_reader,weights_utils,preprocessing,calibration_utils
 from Losses import loss_factory
 from Sampler import sampler_factory
 
@@ -28,6 +28,7 @@ def softmax(x):
 
 
 def main(args):
+    Q = calibration_utils.load_stereo_coefficients(args.stereo_calibration_file)[-1]
     #load json file config
     with open(args.blockConfig) as json_data:
         train_config = json.load(json_data)
@@ -157,6 +158,17 @@ def main(args):
         restorer.restore(sess,args.weights)
         print('Disparity Net Restored?: {}, number of restored variables: {}'.format(True,len(var_to_restore)))
 
+        # input_graph_def = tf.get_default_graph().as_graph_def()
+        # output_graph_def = tf.graph_util.convert_variables_to_constants(
+        #     sess,  # The session
+        #     input_graph_def,  # input_graph_def is useful for retrieving the nodes
+        #     [full_res_disp.name]
+        # )
+
+        # with tf.gfile.GFile(f"{args.output}/madnet.tflite", "wb") as f:
+        #     f.write(output_graph_def.SerializeToString())
+        # # return
+
         num_actions=len(train_ops)
         if args.mode=='FULL':
             selected_train_ops = train_ops
@@ -179,6 +191,8 @@ def main(args):
         reset_counter=0
         step=0
         max_steps=data_set.get_max_steps()
+        best_ssim = 0
+        best_epe = 1e3
         try:	
             start_time = time.time()
             while True:
@@ -236,7 +250,7 @@ def main(args):
                 epe_accumulator.append(fetches[0])
                 bad3_accumulator.append(fetches[1])
 
-                if step%100==0:
+                if step%10==0:
                     #log on terminal
                     fbTime = (time.time()-start_time)
                     exec_time += fbTime
@@ -246,6 +260,10 @@ def main(args):
                     missing_time=(max_steps-step)*fbTime
                     print('Step:{:4d}\tbad3:{:.2f}\tEPE:{:.2f}\tSSIM:{:.2f}\tf/b time:{:3f}\tMissing time:{}'.format(step,fetches[1], fetches[0],new_loss,fbTime,datetime.timedelta(seconds=missing_time)))
                     start_time = time.time()
+                    if fetches[0] < best_epe:
+                        best_epe = fetches[0]
+                        saver = tf.train.Saver()
+                        saver.save(sess, f"{args.output}/best_model")
                 
                 #reset network if necessary
                 if new_loss>args.SSIMTh:
@@ -261,8 +279,16 @@ def main(args):
                     dispy_vis = cv2.normalize(dispy_to_save, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
                     dispy_vis = 255 - dispy_vis
                     dispy_vis = cv2.applyColorMap(dispy_vis, cv2.COLORMAP_TURBO)
-                    cv2.imwrite(os.path.join(args.output, 'disparities_norm/disparity_{}_norm.png'.format(step)), dispy_vis)
-                    
+                    cv2.imwrite(os.path.join(args.output, 'disparities_norm/norm_disparity_{}.png'.format(step)), dispy_vis)
+
+                    points_3d = cv2.reprojectImageTo3D(dispy[0], Q)
+                    depth_map = points_3d[:, :, -1]
+                    depth_map = np.clip(depth_map, 0, 10)
+                    depth_map = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+                    depth_map = 255 - depth_map
+                    depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_TURBO)
+                    cv2.imwrite(os.path.join(args.output, 'depth/depth_{}.png'.format(step)), depth_map)
+
                 step+=1
 
         except tf.errors.OutOfRangeError as e:
@@ -309,6 +335,10 @@ def main(args):
                     f.write(f'{i}\n')
 
             print('All Done, Bye Bye!')
+            saver = tf.train.Saver()
+            saver.save(sess, f"{args.output}/weights")
+
+
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description='Script for online Adaptation of a Deep Stereo Network')
@@ -328,6 +358,7 @@ if __name__=='__main__':
     parser.add_argument("--sampleFrequency",help="sample new network portions to train every K frame",type=int,default=1)
     parser.add_argument("--mode",help="online adaptation mode: NONE - perform only inference, FULL - full online backprop, MAD - backprop only on portions of the network", choices=['NONE','FULL','MAD'], default='MAD')
     parser.add_argument("--logDispStep", help="save disparity every K step, -1 to disable", default=-1, type=int)
+    parser.add_argument("--stereo_calibration_file", help="file which stores stereo calibration parameters", default="/root/AnyNet/calib_result/mate40pro.yml")
     args=parser.parse_args()
 
     if not os.path.exists(args.output):
@@ -336,6 +367,8 @@ if __name__=='__main__':
         os.makedirs(os.path.join(args.output, 'disparities'))
     if args.logDispStep!=-1 and not os.path.exists(os.path.join(args.output, 'disparities_norm')):
         os.makedirs(os.path.join(args.output, 'disparities_norm'))
+    if args.logDispStep!=-1 and not os.path.exists(os.path.join(args.output, 'depth')):
+        os.makedirs(os.path.join(args.output, 'depth'))
     shutil.copy(args.blockConfig,os.path.join(args.output,'config.json'))
     with open(os.path.join(args.output, 'params.sh'), 'w+') as out:
         sys.argv[0] = os.path.join(os.getcwd(), sys.argv[0])

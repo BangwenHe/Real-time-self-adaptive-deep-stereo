@@ -6,3 +6,11 @@
 *.json
 Demo/*/*
 *.txt
+
+checkpoints/
+data/
+*.zip
+results/
+images/
+output*/
+*.csv

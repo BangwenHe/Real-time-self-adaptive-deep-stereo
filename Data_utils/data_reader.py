@@ -77,7 +77,7 @@ def read_list_file(path_file):
             conf_file_list.append(to_load[3])
     return left_file_list,right_file_list,gt_file_list,conf_file_list
 
-def read_image_from_disc(image_path,shape=None,dtype=tf.uint8):
+def read_image_from_disc(image_path,shape=None,dtype=tf.uint8,channels=0):
     """
     Create a queue to hoold the paths of files to be loaded, then create meta op to read and decode image
     Args:
@@ -88,9 +88,9 @@ def read_image_from_disc(image_path,shape=None,dtype=tf.uint8):
     """         
     image_raw = tf.read_file(image_path)
     if dtype==tf.uint8:
-        image = tf.image.decode_image(image_raw)
+        image = tf.image.decode_image(image_raw,channels=channels)
     else:
-        image = tf.image.decode_png(image_raw,dtype=dtype)
+        image = tf.image.decode_png(image_raw,dtype=dtype,channels=channels)
     if shape is None:
         image.set_shape([None,None,3])
     else:
@@ -136,7 +136,7 @@ class dataset():
             gt_image.set_shape([None,None,1])
         else:
             read_type = tf.uint16 if self._double_prec_gt else tf.uint8
-            gt_image = read_image_from_disc(gt_file_name,shape=[None,None,1], dtype=read_type)
+            gt_image = read_image_from_disc(gt_file_name,shape=[None,None,1], dtype=read_type,channels=1)
             gt_image = tf.cast(gt_image,tf.float32)
             if self._double_prec_gt:
                 gt_image = gt_image/256.0
