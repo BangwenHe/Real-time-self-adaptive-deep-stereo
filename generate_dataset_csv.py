@@ -85,26 +85,7 @@ data/result/left_NOH-AL10_1657429303230.png""".split()
 
 def generate_all_outdoor_video_dataset():
     image_folder_to_demo_images = {
-        "data/madnet_images/rgb_1657791278049": "data/result/left_NOH-AL10_1657429302233.png",
-        "data/madnet_images/rgb_1657791344537": "data/result/left_NOH-AL10_1657430018368.png",
-        "data/madnet_images/rgb_1657791614542": "data/result/right_NOH-AL10_1657430550241.png",
-        "data/madnet_images/rgb_1657791739006": "data/result/left_NOH-AL10_1657430912202.png",
-        "data/madnet_images/rgb_1657791837253": "data/result/left_NOH-AL10_1657431290203.png",
-        "data/madnet_images/rgb_1657796416391": "data/indoor_result/003_right_NOH-AL10_1657423920710.png",
-        "data/p30_outdoor_training/images/rgb_1657966175725": None,
-        "data/p30_outdoor_training/images/rgb_1657966236642": None,
-        "data/madnet_images/rgb_1657789702514": None,
-        "data/madnet_images/rgb_1657789764479": None,
-        "data/madnet_images/rgb_1657789947919": None,
-        "data/madnet_images/rgb_1657790039793": None,
-        "data/mate40pro_addition_train/rgb_1658065214462": None,
-        "data/mate40pro_addition_train/rgb_1658065384539": None,
-        "data/p30_addition_train/rgb_1658052141598": None,
-        "data/p30_addition_train/rgb_1658052167885": None,
-        "data/p30_addition_train/rgb_1658052246007": None,
-        "data/p30_addition_train/rgb_1658052297706": None,
-        "data/p30_addition_train/rgb_1658052383990": None,
-        "data/p30_addition_train/rgb_1658052464555": None
+        r"C:\Users\Bangwen\Dataset\2020719-2\madnet_train_videos\rgb_1658214109268": None,
     }
 
     for dataset_root, demo_image_paths in image_folder_to_demo_images.items():
