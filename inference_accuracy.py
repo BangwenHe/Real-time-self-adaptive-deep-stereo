@@ -290,7 +290,7 @@ if __name__ == "__main__":
     # model_no_adaptation = MADNet(weight_path="checkpoints/MADNet/kitti/weights.ckpt", image_shape=[480, 640], mode='NONE')
     # model_outdoor = MADNet(weight_path="results/outdoor_p30_accuracy_pretraining/weights", image_shape=[480, 640], mode='NONE')
     # model_outdoor = MADNet(weight_path="results/outdoor_p30_accuracy_pretraining_circle/weights", image_shape=[480, 640], mode='NONE')
-    model_outdoor = MADNet(weight_path="results/outdoor_p30_accuracy_pretraining_6/best_model", image_shape=[480, 640], mode='NONE')
+    # model_outdoor = MADNet(weight_path="results/outdoor_p30_accuracy_pretraining_6/best_model", image_shape=[480, 640], mode='NONE')
     # model_outdoor = MADNet(weight_path="results/outdoor_accuracy_pretraining/weights", image_shape=[480, 640], mode='NONE')
     # model_no_adaptation = MADNet(weight_path="checkpoints/MADNet/kitti/weights.ckpt", image_shape=[640, 480], mode='NONE')
     # model_indoor = MADNet(weight_path="results/indoor_accuracy_pretraining/weights", image_shape=[640, 480], mode='NONE')
@@ -301,19 +301,20 @@ if __name__ == "__main__":
     # model_indoor = MADNet(weight_path="results/indoor_mate40p_accuracy_pretraining_moving/weights", image_shape=[640, 480], mode='NONE')
     # model_outdoor = MADNet(weight_path="results/outdoor_accuracy_pretraining/weights", image_shape=[640, 480], mode='NONE')
     # model_outdoor = MADNet(weight_path="results/outdoor_accuracy_pretraining_1/weights", image_shape=[640, 480], mode='NONE')
-    # phone_type = "mate40pro_undistorted"
-    # phone_type = "remove_opencv_distortion_param"
-    # phone_type = "mate40pro"
-    # phone_type = "p30pro"
-    phone_type = "p30_new"
-    stereo_calibration_file = f"../AnyNet/calib_result/{phone_type}.yml"
+    # model_outdoor = MADNet(weight_path="results/xm12su_5m/weights", image_shape=[640, 480], mode='NONE')
+    model_outdoor = MADNet(weight_path="results/pixel4_5m/weights", image_shape=[640, 480], mode='NONE')
+    stereo_calibration_file = "../AnyNet/calib_result/xm12su_1.51635581_1.51225972_221208.yml"
+    stereo_calibration_file = "../AnyNet/calib_result/pixel4_1.593118_1.59532552_221208.yml"
     
-    root_image_folder = "../AnyNet/images"
+    root_image_folder = "data/221208-3/test3"
     modes = ["processed_static", "processed_slow", "processed_fast"]
-    # modes = ["processed_static"]
-    # depth_folders = ["0.5", "1"]
-    depth_folders = ["3", "5"]
-    # depth_folders = ["0.5", "1", "3", "5"]
+    depth_folders = ["0.5", "1", "3"]
+    
+    root_image_folder = "images/221210-1"
+    root_output_folder = "output4/221210-1"
+    modes = ["processed_static", "processed_slow", "processed_fast"]
+    depth_folders = ["0.5", "1", "3", "5"]
+
     min_depth = -10
     max_depth = 20
     if 'model_outdoor' in globals():
@@ -328,7 +329,8 @@ if __name__ == "__main__":
     else:
         raise ValueError("wrong model")
 
-    root_output_folder = f"output2/{model_type}/{phone_type}"
+    root_output_folder = f"output4/221208-3/test3/{model_type}"
+    root_output_folder = f"output4/221210-1/{model_type}"
 
     Q = load_stereo_coefficients(stereo_calibration_file)[-1]
 
@@ -339,17 +341,19 @@ if __name__ == "__main__":
 
         output_folder = os.path.join(root_output_folder, depth_folder, mode)
         raw_disp_output_folder = os.path.join(root_output_folder, depth_folder, mode.replace("processed", "disparity"))
-        image_folder = os.path.join(root_image_folder, phone_type, depth_folder, mode)
+        image_folder = os.path.join(root_image_folder, depth_folder, mode)
         os.makedirs(output_folder, exist_ok=True)
         os.makedirs(raw_disp_output_folder, exist_ok=True)
         left_image_paths, right_image_paths = build_input_images(image_folder)
 
-        roi_file_path = os.path.join(root_image_folder, phone_type, depth_folder, f"{mode}_{depth_folder}.roi")
+        roi_file_path = os.path.join(root_image_folder, depth_folder, f"{mode}_{depth_folder}.roi")
         image_name_to_bbox = load_roi_file(roi_file_path)
 
         for _, (left_image_path, right_image_path) in enumerate(zip(left_image_paths, right_image_paths)):
             imgL = load_image(left_image_path)[np.newaxis, ...]
             imgR = load_image(right_image_path)[np.newaxis, ...]
+            if "pixel4" in stereo_calibration_file:
+                imgL, imgR = imgR, imgL
 
             outputs = model.inference(imgL, imgR)
             disp = np.squeeze(outputs[-1])
@@ -387,7 +391,7 @@ if __name__ == "__main__":
             depth_map = np.clip(depth_map, min_depth, max_depth)
             depth_map = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
             depth_map = 255 - depth_map
-            depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_TURBO)
+            depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_MAGMA)
             
             left_image = cv2.cvtColor(imgL[0], cv2.COLOR_RGB2BGR)
             cv2.putText(left_image, "origin", (20, 20), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)

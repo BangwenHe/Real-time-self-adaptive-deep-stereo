@@ -288,19 +288,17 @@ def load_stereo_coefficients(path):
 
 if __name__ == "__main__":
     # model_no_adaptation = MADNet(weight_path="checkpoints/MADNet/kitti/weights.ckpt", image_shape=[480, 640], mode='NONE')
-    model_outdoor = MADNet(weight_path="results/outdoor_p30_accuracy_pretraining/weights", image_shape=[480, 640], mode='NONE')
+    # model_outdoor = MADNet(weight_path="results/outdoor_p30_accuracy_pretraining/weights", image_shape=[480, 640], mode='NONE')
     # model_outdoor = MADNet(weight_path="results/outdoor_accuracy_pretraining/weights", image_shape=[480, 640], mode='NONE')
-    # model_no_adaptation = MADNet(weight_path="checkpoints/MADNet/kitti/weights.ckpt", image_shape=[640, 480], mode='NONE')
+    model_no_adaptation = MADNet(weight_path="checkpoints/MADNet/kitti/weights.ckpt", image_shape=[640, 480], mode='NONE')
     # model_indoor = MADNet(weight_path="results/indoor_accuracy_pretraining/weights", image_shape=[640, 480], mode='NONE')
     # model_outdoor = MADNet(weight_path="results/outdoor_accuracy_pretraining/weights", image_shape=[640, 480], mode='NONE')
-    # phone_type = "mate40pro"
-    phone_type = "p30pro"
-    stereo_calibration_file = f"../AnyNet/calib_result/{phone_type}.yml"
     
-    root_image_folder = "images/p30_new"
+    stereo_calibration_file = f"../AnyNet/calib_result/xm12su_1.51635581_1.51225972_221208.yml"
+    
+    root_image_folder = "data/221208-3/test3"
     modes = ["processed_static", "processed_slow", "processed_fast"]
-    # depth_folders = ["0.5", "1"]
-    depth_folders = ["3", "5"]
+    depth_folders = ["0.5", "1", "3"]
     min_depth = -10
     max_depth = 20
     if 'model_outdoor' in globals():
@@ -315,7 +313,7 @@ if __name__ == "__main__":
     else:
         raise ValueError("wrong model")
 
-    root_output_folder = f"output3/{model_type}/{phone_type}"
+    root_output_folder = f"output4/221208-3/test3/{model_type}"
 
     Q = load_stereo_coefficients(stereo_calibration_file)[-1]
 

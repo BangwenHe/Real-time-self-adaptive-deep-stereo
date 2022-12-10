@@ -1,16 +1,14 @@
 import argparse
-from itertools import product
 import os
 
-import tensorflow as tf 
+import tensorflow as tf
 import numpy as np
-import numpy.ma as ma
 import json
 import cv2
 from PIL import Image
 
 from Data_utils import preprocessing, weights_utils
-import Nets 
+import Nets
 from Sampler import sampler_factory
 from Losses import loss_factory
 
@@ -31,7 +29,7 @@ class MADNet(object):
         self._image_shape = image_shape
         self._crop_shape = crop_shape
         self._SSIMTh = SSIMTh
-        self._mode = mode 
+        self._mode = mode
         self._ready = self._setup_graph()
         self._ready &= self._initialize_model()
         self.first = True
@@ -48,11 +46,11 @@ class MADNet(object):
 
         self._left_input = self._left_placeholder
         self._right_input = self._right_placeholder
-        
+
         if self._image_shape[0] is not None:
             self._left_input = preprocessing.rescale_image(self._left_input, self._image_shape)
             self._right_input = preprocessing.rescale_image(self._right_input, self._image_shape)
-        
+
         if self._crop_shape[0] is not None:
             self._left_input = tf.image.resize_image_with_crop_or_pad(self._left_input, self._crop_shape[0], self._crop_shape[1])
             self._right_input = tf.image.resize_image_with_crop_or_pad(self._right_input, self._crop_shape[0], self._crop_shape[1])
@@ -79,20 +77,20 @@ class MADNet(object):
 
             #full resolution loss between warped right image and original left image
             self._loss =  loss_factory.get_reprojection_loss('mean_SSIM_l1',reduced=True)(self._predictions,self._inputs)
-    
+
     def _MAD_adaptation_ops(self):
         #build train ops for separate portions of the network
         self._load_block_config()
 
         #keep all predictions except full res
-        predictions = self._predictions[:-1] 
-        
+        predictions = self._predictions[:-1]
+
         inputs_modules = self._inputs
-        
+
         assert(len(predictions)==len(self._train_config))
         for counter,p in enumerate(predictions):
             print('Build train ops for disparity {}'.format(counter))
-                    
+
             #rescale predictions to proper resolution
             multiplier = tf.cast(tf.shape(self._left_input)[1]//tf.shape(p)[1],tf.float32)
             p = preprocessing.resize_to_prediction(p,inputs_modules['left'])*multiplier
@@ -108,20 +106,20 @@ class MADNet(object):
             for name in layer_to_train:
                 var_accumulator+=self._net.get_variables(name)
             print('Number of variable to train: {}'.format(len(var_accumulator)))
-                
+
             #add new training op
             self._train_ops.append(self._trainer.minimize(reconstruction_loss,var_list=var_accumulator))
 
             print('Done')
             print('='*50)
-        
+
         #create Sampler to fetch portions to train
         self._sampler = sampler_factory.get_sampler('PROBABILITY',1,0)
-    
+
     def _Full_adaptation_ops(self):
         self._train_ops.append(self._trainer.minimize(self._loss))
         self._sampler = sampler_factory.get_sampler('FIXED',1,0)
-    
+
     def _no_adaptation_ops(self):
         #mock ops that don't do anything
         self._train_ops.append(tf.no_op())
@@ -152,7 +150,7 @@ class MADNet(object):
         self._build_adaptation_ops()
 
         return True
-    
+
     def _initialize_model(self):
         """
         Create tensorflow session and initialize the network
@@ -213,7 +211,7 @@ class MADNet(object):
                 self._loss_t_1 = full_ssim
                 self.first = False
 
-            self._expected_loss = 2*self._loss_t_1-self._loss_t_2	
+            self._expected_loss = 2*self._loss_t_1-self._loss_t_2
             gain_loss=self._expected_loss-full_ssim
             self._sample_distribution = 0.99*self._sample_distribution
             self._sample_distribution[self._last_trained_blocks] += 0.01*gain_loss
@@ -221,13 +219,13 @@ class MADNet(object):
             self._last_trained_blocks = train_op_id
             self._loss_t_2 = self._loss_t_1
             self._loss_t_1 = full_ssim
-        
+
         if full_ssim > self._SSIMTh:
             print('Resetting Network...')
             self._restore_op()
-        
+
         return disp_prediction
-    
+
     def save(self, save_path):
         saver = tf.train.Saver()
         saver.save(self._session, save_path)
@@ -282,13 +280,24 @@ def load_stereo_coefficients(path):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--weight_path", type=str)
-    parser.add_argument("--image_shape", nargs="+", type=int, default=[640, 480])
+    parser.add_argument("--image_shape", nargs="+", type=int, default=[640, 480], help="height * width")
     parser.add_argument("--image_folder", type=str)
     parser.add_argument("--calib_file", type=str)
-    parser.add_argument("--output_folder", type=str)
+    parser.add_argument("--output_folder", type=str, help="save images or videos")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--save_video", action="store_true")
     args = parser.parse_args()
     return args
+
+
+def on_mouse_moving(event, x, y, flags, param):
+    depth_map, showing_img = param
+    if event == cv2.EVENT_MOUSEMOVE:
+        copyed = showing_img.copy()
+        cv2.putText(copyed, f"{depth_map[y][x]}", (0, showing_img.shape[0]), cv2.FONT_HERSHEY_PLAIN, 1.5, (255, 255, 255),2)
+
+        print(depth_map[y][x])
+        cv2.imshow("depth", copyed)
 
 
 if __name__ == "__main__":
@@ -299,16 +308,27 @@ if __name__ == "__main__":
 
     stereo_calibration_file = args.calib_file
     image_folder = args.image_folder
+    if image_folder.endswith(("\\", "/")):
+        image_folder = image_folder[:-1]
+    folder_name = os.path.split(image_folder)[1]
 
     min_depth = 0
     max_depth = 8
 
-    output_folder = args.output_folder
+    root_output_folder = args.output_folder
+    output_folder = os.path.join(root_output_folder, folder_name)
     os.makedirs(output_folder, exist_ok=True)
     Q = load_stereo_coefficients(stereo_calibration_file)[-1]
 
+    if args.save_video:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        output_video_path = os.path.join(root_output_folder, f"{folder_name}.mp4")
+        print(f"video is saved to {output_video_path}")
+        vid = cv2.VideoWriter(output_video_path, fourcc, 30, (image_shape[1], image_shape[0]))
+        print(image_shape)
+
     left_image_paths, right_image_paths = build_input_images(image_folder)
-    for _, (left_image_path, right_image_path) in enumerate(zip(left_image_paths, right_image_paths)):
+    for idx, (left_image_path, right_image_path) in enumerate(zip(left_image_paths, right_image_paths)):
         imgL = load_image(left_image_path)[np.newaxis, ...]
         imgR = load_image(right_image_path)[np.newaxis, ...]
 
@@ -324,14 +344,27 @@ if __name__ == "__main__":
         depth_map = np.clip(depth_map, min_depth, max_depth)
         depth_map = cv2.normalize(depth_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         depth_map = 255 - depth_map
-        depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_MAGMA)
-        
+        depth_map = cv2.applyColorMap(depth_map, cv2.COLORMAP_TURBO)
+
         image_path = os.path.join(output_folder, os.path.basename(left_image_path).replace(".png", "_madnet.png"))
         if args.debug:
             left_image = cv2.cvtColor(imgL[0], cv2.COLOR_RGB2BGR)
             cv2.putText(left_image, "origin", (20, 20), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
             cv2.putText(disp_vis, "dispraity", (20, 20), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
             cv2.putText(depth_map, "depth", (20, 20), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
-            cv2.imwrite(image_path, np.hstack([left_image, disp_vis, depth_map]))
+
+            cv2.imshow("debug", np.hstack([left_image, disp_vis]))
+            cv2.imshow("depth", depth_map)
+            cv2.setMouseCallback("depth", on_mouse_moving, [points_3d[:, :, -1], depth_map])
+            cv2.waitKey(0)
         else:
             cv2.imwrite(image_path, depth_map)
+
+        if args.save_video:
+            print(f"{idx}/{len(left_image_paths)}", end="\r")
+            if idx == 0:
+                print(depth_map.shape)
+            vid.write(depth_map)
+
+    if args.save_video:
+        vid.release()
